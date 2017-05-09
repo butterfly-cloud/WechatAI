@@ -2,12 +2,14 @@
 from wxpy import *
 #sys.path.append("/Users/yixin/sunhao25/")
 from zodic import Zodic
+from processor.tuling import TuLing
 from random import choice
 import random
 import linecache
 import subprocess
 import threading
-import time
+import time, datetime
+
 
 class Robot(Bot):
 
@@ -16,18 +18,23 @@ class Robot(Bot):
         self.enable_puid('./cache/admin_puid.pkl')
         self.admin = self.get_admin()
         self.zodic = Zodic()
-        self.user_code = ['所有指令:','joke', 'python: wiki 主页','music', 'wru', '星座：查看运势，例：摩羯', 'lunch', 'll: lunch list']
-        self.admin_code = ['管理员指令:', 'st: status','勿扰: wrk 开 | wrg 关', 'lunch = [xx,xx]', 'lunch + xx', 'lunch - xx','logout','limit plat id']
+        self.tuling = TuLing()
+
+        self.user_code = ['所有指令:','joke', 'python: wiki 主页','music', '星座：查看运势，例：摩羯', 'lunch', 'll: lunch list']
+        self.admin_code = ['管理员指令:', 'st: status','勿扰: wrk 开 | wrg 关', 'lunch = [xx,xx]', 'lunch + xx', 'lunch - xx',\
+                            'logout','limit plat id','tlk | tkg : 开启/关闭聊天程序']
+        #勿扰状态
         self.wr = False
 
-        self.lunch = ['迦南', '7楼', '金地', '711']
+        self.lunch = ['迦南', '7楼', '金地', '驴肉火烧']
 
         #open laugh file
         self.file_count = len(open('./files/laugh.txt','rU').readlines())
 
         self.wr_msg = '我现在正忙，看到消息会第一时间回复'
 
-        group_receiver = ensure_one(self.groups().search('冰岛'))
+        group_receiver = ensure_one(self.groups().search('满天星也是research'))
+        #group_receiver = ensure_one(self.groups().search('冰岛'))
         self.logger = get_wechat_logger(group_receiver)
 
         #动态的数据不能再这里制定，不然值不会变，如random函数
@@ -37,7 +44,6 @@ class Robot(Bot):
         #纯文本信息
         self.FRIEND_TEXT = {
                         'code':  "\n".join(self.user_code),
-                        'wru': '我是一个AI，我的父亲是克劳德，我刚刚被开发出来，功能还不完善',
                         'python': 'http://wiki.bdp.cc/pages/viewpage.action?pageId=22577867',
         }
 
@@ -53,14 +59,13 @@ class Robot(Bot):
                         #以下是admin指令
                         'wrk': self.set_wrk,
                         'wrg': self.set_wrg,
-                        'logout': self.logout,
                         'll': self.all_lunch,
                         'st': self.get_status,
         }
 
         self.FUNC_CODE_PARAM = {
                         #msg
-                        'logout': self.logout,
+                        'logout': self.ai_logout,
         }
 
         
@@ -77,7 +82,7 @@ class Robot(Bot):
         self.friend_no_param = set(['lunch','joke', 'll'])
         self.friend_param = set([])
 
-        self.admin_no_param = self.friend_no_param | set(['wrk','wrg','status'])
+        self.admin_no_param = self.friend_no_param | set(['wrk','wrg','st'])
         self.admin_param = self.friend_param | set(['logout'])
 
         #需要正则判断的无参数的指令
@@ -99,7 +104,9 @@ class Robot(Bot):
     #    return "\n".join(self.user_code)
 
     def get_status(self):
-        ans = '勿扰模式: ' + '开' if self.wr else '关'
+        ans = u'勿扰模式: ' + (u'开' if self.wr else u'关')
+        ans += u'\n聊天程序: ' + (u'开' if self.tuling.get_switch() else u'关')
+        return ans
 
     
 
@@ -126,7 +133,13 @@ class Robot(Bot):
             return '删除成功'
 
     def get_joke(self):
-        return self.zodic.get_joke()
+        #勿扰
+        if self.wr:
+            return self.wr_msg
+
+        at_msg = random.randrange(1,self.file_count, 1)
+        msg = linecache.getline('./files/laugh.txt', at_msg).strip()
+        return msg
 
     def set_wrk(self):
         self.wr = True
@@ -136,9 +149,9 @@ class Robot(Bot):
         self.wr = False
         return '关闭勿扰模式'
 
-    def logout(self, msg):
+    def ai_logout(self, msg):
         msg.reply_msg('AI logout')
-        self.logout() 
+        self.logout()
 
     def is_number(self, x):
         try:
@@ -160,42 +173,9 @@ class Robot(Bot):
             return ans
 
     #文本信息，处理函数
-    def friend_text_process(self, msg):
+    def friend_text_process(self, msg, tuling=True):
 
         msg_rec = msg.text
-
-        """
-        if msg.text.lower() == 'code':
-            return "\n".join(self.user_code)
-
-        if msg.text.lower() == 'wru':
-            return '我是一个AI，我的父亲是克劳德，我刚刚被开发出来，功能还不完善'
-
-        if msg.text.lower() == 'lunch':
-            return choice(self.lunch)
-
-        if msg.text.lower() == 'll':
-            return ", ".join(self.lunch)
-
-
-        if msg.text in self.zodic.stars.keys():
-            return self.zodic.get_data(msg.text)
-
-        if msg_rec.startswith('lunch = ') and isinstance(msg_rec[10:], list) and list(msg_rec[10:]) < 20:
-            self.lunch = list(msg_rec[10:])
-            return '设置完成'
-
-        if msg_rec.startswith('lunch + ') and len(msg_rec) < 20:
-            self.lunch.append(msg_rec[10:])
-            return '设置完成'
-
-        if msg_rec.startswith('lunct - ') and len(msg_rec) < 20:
-            self.lunch.remove(msg_rec[10:])
-            return '设置完成'
-
-        if msg.text.lower() == 'joke':
-            return self.zodic.get_joke()
-        """
 
         #判断文本信息指令
         if self.FRIEND_TEXT.get(msg_rec) is not None:
@@ -209,37 +189,13 @@ class Robot(Bot):
         if msg_rec in self.friend_no_param:
             return self.FUNC_CODE_NO_PARAM.get(msg_rec)()
 
-
-        #默认调用图灵
-        return self.zodic.get_tuling(msg.text, 'test')
+        if tuling:
+            #默认调用图灵
+            return self.tuling.get_msg(msg.text, msg.sender.puid)
 
         
-    def admin_text_process(self, msg):
+    def admin_text_process(self, msg, tuling=True):
         msg_rec = msg.text
-
-        """
-        if msg.text.lower() == 'admin':
-            return "\n".join(self.admin_code)
-
-        #开启勿扰模式
-        if msg.text.lower() == 'wrk':
-            self.wr = True
-            return '开启勿扰模式'
-
-        #关闭勿扰模式
-        if msg.text.lower() == 'wrg':
-            self.wr = False
-            return '关闭勿扰模式'
-
-        if msg.text == 'logout':
-            msg.reply_msg('AI logout')
-            self.logout() 
-
-        
-
-
-        return self.code_to_info_user(msg)
-        """
 
         #判断文本信息指令
         if self.FRIEND_TEXT.get(msg_rec) is not None:
@@ -277,8 +233,13 @@ class Robot(Bot):
         if ans is not None:
             return ans
 
-        #默认调用图灵
-        return self.zodic.get_tuling(msg.text, 'test')
+        #开关聊天程序
+        if msg_rec in ['tlk','tlg']:
+            return self.tuling.set_switch(True if msg_rec == 'tlk' else False)
+
+        if tuling :
+            #默认调用图灵
+            return self.tuling.get_msg(msg.text, msg.sender.puid)
 
     #后注册的配置具有更高的优先级
     def memmber_func(self):
@@ -303,10 +264,10 @@ class Robot(Bot):
             # 判断好友请求中的验证文本
             if 'cloud' in msg.text.lower():
                 # 接受好友 (msg.card 为该请求的用户对象)
-                new_friend = bot.accept_friend(msg.card)
+                new_friend = self.accept_friend(msg.card)
                 # 或 new_friend = msg.card.accept()
                 # 向新的好友发送消息
-                new_friend.send('你好，我们现在可以愉快地聊天啦')
+                new_friend.send('我是孙小号，输入code查看指令')
 
 
     def group_is_at(self, msg):
@@ -314,40 +275,59 @@ class Robot(Bot):
         if self.wr:
             return self.wr_msg
 
-        at_msg = random.randrange(1,self.file_count, 1)
-        msg = linecache.getline('./files/laugh.txt', at_msg).strip()
-        return msg
-
-    """
-    def group_msg(self, msg):
-        return self.code_to_info_user(msg)
-    """
+        return self.tuling.get_msg(msg.text[5:], msg.sender.puid)
+        
 
     def group_func(self):
-        test_group = ensure_one(self.groups().search('冰岛'))
+        
+        mantianxing_group = ensure_one(self.groups().search('满天星也是research'))
+        @self.register(mantianxing_group, TEXT)
+        def test_group_at(msg):
+            if msg.is_at:
+                return self.group_is_at(msg)
 
-        @self.register(test_group)
+            if self.wr:
+                pass
+            else:
+                return self.friend_text_process(msg, False)
+        
+        test_group = ensure_one(self.groups().search('冰岛'))
+        @self.register(test_group, TEXT)
         def test_group_at(msg):
             if msg.is_at:
                 return self.group_is_at(msg)
 
             if msg.member == self.admin:
-                ans = self.admin_text_process(msg)
+                ans = self.admin_text_process(msg, False)
                 if ans is not None:
                     return ans
 
             if self.wr:
                 pass
+            elif '孙小号' in msg.text :
+                joke_replay = [
+                    '祥参又要下班了',
+                    '🐻才今天带午饭了么',
+                    '泰青，房价又涨了！',
+                    '兰总：一毛一样',
+                    'amazon 预估又有问题了',
+                ]
+                return choice(joke_replay) if random.randint(1,10) == 1 else None
             else:
-                return self.friend_text_process(msg)
-
+                return self.friend_text_process(msg, False)
+        
           
     #定时吃饭
     def cron_lunch(self):
         while True:
-            self.logger.warning('该吃饭了!!!')
-            time.sleep(10)
-
+            SECONDS_PER_DAY = 24 * 60 * 60
+            curTime = datetime.datetime.now()
+            desTime = curTime.replace(hour=12, minute=0, second=0, microsecond=0)
+            delta = (desTime - curTime).total_seconds()
+            skipSeconds = (SECONDS_PER_DAY + delta ) if delta < 0 else delta
+            time.sleep(skipSeconds)
+            self.logger.warning(choice(['民以食为天，你还不吃饭','到点啦，该吃午饭啦', '🍚🍚🍚']))
+         
 
     def threads(self):
         t_lunch = threading.Thread(target=self.cron_lunch)
