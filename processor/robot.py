@@ -1,7 +1,6 @@
 #coding=utf8
 from wxpy import *
-#sys.path.append("/Users/yixin/sunhao25/")
-from zodic import Zodic
+from processor.zodic import Zodic
 from processor.tuling import TuLing
 from random import choice
 import random
@@ -9,6 +8,7 @@ import linecache
 import subprocess
 import threading
 import time, datetime
+import config
 
 
 class Robot(Bot):
@@ -20,10 +20,7 @@ class Robot(Bot):
         self.zodic = Zodic()
         self.tuling = TuLing()
 
-        self.user_code = ['所有指令:','joke', 'python: wiki 主页','music', '星座：查看运势，例：摩羯', 'lunch', 'll: lunch list']
-        self.admin_code = ['管理员指令:', 'st: status','勿扰: wrk 开 | wrg 关', 'lunch = [xx,xx]', 'lunch + xx', 'lunch - xx',\
-                            'logout','limit plat id','tlk | tkg : 开启/关闭聊天程序']
-        #勿扰状态
+        #disturb state
         self.wr = False
 
         self.lunch = ['迦南', '7楼', '金地', '驴肉火烧']
@@ -31,10 +28,8 @@ class Robot(Bot):
         #open laugh file
         self.file_count = len(open('./files/laugh.txt','rU').readlines())
 
-        self.wr_msg = '我现在正忙，看到消息会第一时间回复'
-
+        #change to your group
         group_receiver = ensure_one(self.groups().search('满天星也是research'))
-        #group_receiver = ensure_one(self.groups().search('冰岛'))
         self.logger = get_wechat_logger(group_receiver)
 
         #动态的数据不能再这里制定，不然值不会变，如random函数
@@ -43,12 +38,12 @@ class Robot(Bot):
 
         #纯文本信息
         self.FRIEND_TEXT = {
-                        'code':  "\n".join(self.user_code),
+                        'code':  "\n".join(config.USER_CODE),
                         'python': 'http://wiki.bdp.cc/pages/viewpage.action?pageId=22577867',
         }
 
         self.ADMIN_TEXT = {
-                        'admin':  "\n".join(self.admin_code),
+                        'admin':  "\n".join(config.ADMIN_CODE),
         }
 
 
@@ -92,16 +87,14 @@ class Robot(Bot):
 
 
     def get_admin(self):
-        users = self.search('克劳德')
+        users = self.search(config.ADMIN_NAME)
         admin = None
         for v in users:
-            if v.puid == '6af65e45':
+            if v.puid == config.ADMIN_PUID:
                 admin = v
         return admin
 
     #将文字信息函数分离出来，这样可以通过指令集合来区分不同的人，避免拟合
-    #def general_code(self):
-    #    return "\n".join(self.user_code)
 
     def get_status(self):
         ans = u'勿扰模式: ' + (u'开' if self.wr else u'关')
@@ -135,7 +128,7 @@ class Robot(Bot):
     def get_joke(self):
         #勿扰
         if self.wr:
-            return self.wr_msg
+            return config.WR_MSG
 
         at_msg = random.randrange(1,self.file_count, 1)
         msg = linecache.getline('./files/laugh.txt', at_msg).strip()
@@ -160,18 +153,6 @@ class Robot(Bot):
         except:
             return False
 
-
-    #检查是否是额度测试代码
-    def check_limit_code(self, msg):
-        arr = msg.text.split(' ')
-        plats = set(['amazon','ebay','wish','lazada'])
-        if len(arr) != 3 or arr[0] != 'limit' or arr[1] not in plats or self.is_number(arr[2]) == False:
-            return None
-        else:
-            msg.reply_msg('running...')
-            code,ans = subprocess.getstatusoutput('/usr/bin/python /Users/yixin/sunhao25/std_miner/testwm.py '+arr[1]+' '+str(arr[2]))
-            return ans
-
     #文本信息，处理函数
     def friend_text_process(self, msg, tuling=True):
 
@@ -190,7 +171,7 @@ class Robot(Bot):
             return self.FUNC_CODE_NO_PARAM.get(msg_rec)()
 
         if tuling:
-            #默认调用图灵
+            #默认调用图灵AI
             return self.tuling.get_msg(msg.text, msg.sender.puid)
 
         
@@ -228,11 +209,6 @@ class Robot(Bot):
         if ans is not None:
             return ans
 
-        #是否是测试额度代码
-        ans = self.check_limit_code(msg)
-        if ans is not None:
-            return ans
-
         #开关聊天程序
         if msg_rec in ['tlk','tlg']:
             return self.tuling.set_switch(True if msg_rec == 'tlk' else False)
@@ -252,7 +228,7 @@ class Robot(Bot):
                     return ans
 
             if self.wr:
-                return self.wr_msg
+                return config.WR_MSG
             else:
                 return self.friend_text_process(msg)
 
@@ -267,13 +243,13 @@ class Robot(Bot):
                 new_friend = self.accept_friend(msg.card)
                 # 或 new_friend = msg.card.accept()
                 # 向新的好友发送消息
-                new_friend.send('我是孙小号，输入code查看指令')
+                new_friend.send('我是@孙小号，输入code查看指令')
 
 
     def group_is_at(self, msg):
         #勿扰
         if self.wr:
-            return self.wr_msg
+            return config.WR_MSG
 
         return self.tuling.get_msg(msg.text[5:], msg.sender.puid)
         
@@ -290,43 +266,17 @@ class Robot(Bot):
                 pass
             else:
                 return self.friend_text_process(msg, False)
-        
-        test_group = ensure_one(self.groups().search('冰岛'))
-        @self.register(test_group, TEXT)
-        def test_group_at(msg):
-            if msg.is_at:
-                return self.group_is_at(msg)
-
-            if msg.member == self.admin:
-                ans = self.admin_text_process(msg, False)
-                if ans is not None:
-                    return ans
-
-            if self.wr:
-                pass
-            elif '孙小号' in msg.text :
-                joke_replay = [
-                    '祥参又要下班了',
-                    '🐻才今天带午饭了么',
-                    '泰青，房价又涨了！',
-                    '兰总：一毛一样',
-                    'amazon 预估又有问题了',
-                ]
-                return choice(joke_replay) if random.randint(1,10) == 1 else None
-            else:
-                return self.friend_text_process(msg, False)
-        
           
-    #定时吃饭
+    #lunch warning
     def cron_lunch(self):
         while True:
             SECONDS_PER_DAY = 24 * 60 * 60
             curTime = datetime.datetime.now()
-            desTime = curTime.replace(hour=12, minute=0, second=0, microsecond=0)
+            desTime = curTime.replace(hour=12, minute=5, second=1, microsecond=0)
             delta = (desTime - curTime).total_seconds()
             skipSeconds = (SECONDS_PER_DAY + delta ) if delta < 0 else delta
             time.sleep(skipSeconds)
-            self.logger.warning(choice(['民以食为天，你还不吃饭','到点啦，该吃午饭啦', '🍚🍚🍚']))
+            self.logger.warning(choice(config.LUNCH_WARN))
          
 
     def threads(self):

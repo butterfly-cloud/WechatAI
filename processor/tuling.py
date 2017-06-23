@@ -21,7 +21,8 @@ class TuLing(object):
 
     def get_msg(self, msg, user_id=123):
         if self.tl_open is False:
-            return u'聊天程序已关闭'
+            r = requests.post('http://localhost:8899/botchat', data={'auth':'cloud','uid':str(user_id), 'ques':msg})
+            return r.text
 
         #user_id = user.replace('@', '')[:30]
         body = {'key': self.key, 'info': msg.encode('utf8'), 'userid': user_id}
